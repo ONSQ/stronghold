@@ -35,9 +35,16 @@ export interface CheckIn {
   createdAt: Date;
 }
 
+export interface BibleVerse {
+  reference: string; // e.g., "Philippians 4:13"
+  text: string; // The actual verse text
+  reason?: string; // Why this verse was chosen based on user's state
+}
+
 export interface CheckInResponse {
   checkIn: CheckIn;
   analysis: string;
   recommendations: string[];
   workoutAdjustments: string[];
+  bibleVerse?: BibleVerse; // Daily Bible verse matching mental/emotional state
 }

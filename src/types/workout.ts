@@ -1,10 +1,12 @@
 // Workout Types
 
-export type EquipmentType = 
+export type EquipmentType =
   | 'rowing_machine'
-  | 'resistance_bands' 
+  | 'resistance_bands'
   | 'cables'
-  | 'free_weights'
+  | 'barbell'
+  | 'ez_bar'
+  | 'dumbbells'
   | 'stability_ball'
   | 'bodyweight';
 
@@ -18,6 +20,30 @@ export type WorkoutType =
 export type WorkoutPhase = 'warmup' | 'strength' | 'cardio' | 'cooldown';
 
 export type ExerciseDifficulty = 'easy' | 'good' | 'hard' | 'pain';
+
+export type PostWorkoutOverall = 'energized' | 'good' | 'tired' | 'exhausted';
+export type PostWorkoutMood = 'uplifted' | 'calm' | 'neutral' | 'drained' | 'frustrated';
+
+export interface PostWorkoutCheck {
+  physical: {
+    knee: number; // 1-10 scale (how does knee feel after workout)
+    shoulder: number; // 1-10 scale (how does shoulder feel after workout)
+    overall: PostWorkoutOverall; // overall physical feeling
+    energy: number; // 1-10 scale (energy level after workout)
+  };
+  mental: {
+    clarity: number; // 1-10 scale (mental clarity after workout)
+    stress: number; // 1-10 scale (stress level after workout)
+    focus: number; // 1-10 scale (ability to focus after workout)
+  };
+  emotional: {
+    mood: PostWorkoutMood; // primary mood after workout
+    intensity: number; // 1-10 scale (how strong the mood is)
+    outlook: number; // 1-10 scale (optimism about the day)
+  };
+  notes?: string; // optional notes about the workout experience
+  completedAt: Date; // when the post-workout check was completed
+}
 
 export interface ExerciseSet {
   targetReps?: number;
@@ -45,6 +71,8 @@ export interface Exercise {
   skipped?: boolean;
   skipReason?: string;
   substitutedFrom?: string;
+  targetMuscles?: string[]; // muscles targeted by this exercise
+  safetyConsiderations?: string[]; // e.g., 'Knee Friendly', 'Shoulder Friendly'
 }
 
 export interface Workout {
@@ -59,21 +87,7 @@ export interface Workout {
   completedAt?: Date;
   coachingNotes?: string;
   checkInId?: string; // link to morning check-in
-  postWorkout?: {
-    physical: {
-      knee: number;
-      shoulder: number;
-      overall: 'good' | 'tired' | 'exhausted';
-    };
-    mental: {
-      state: string;
-      clarity: number;
-    };
-    emotional: {
-      primary: string;
-    };
-    notes?: string;
-  };
+  postWorkout?: PostWorkoutCheck;
   createdAt: Date;
   updatedAt: Date;
 }

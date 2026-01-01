@@ -1,16 +1,16 @@
 // Check-In Screen - Morning wellness check
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors, fontSize, fontWeight, spacing } from '@/theme/colors';
+import { colors, fontSize, fontWeight, spacing, borderRadius } from '@/theme/colors';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import SliderInput from '@/components/ui/Slider';
 import SelectButton from '@/components/ui/SelectButton';
 import { PhysicalState, MentalState, EmotionalState, CheckIn } from '@/types/checkin';
 import { workoutGenerator } from '@/services/ai/workoutGenerator';
-import { database } from '@/database';
+import { storageService } from '@/services/storage/asyncStorage';
 
 const MENTAL_STATES = [
   { value: 'clear', label: 'Clear & Focused', emoji: '😌' },
@@ -38,7 +38,7 @@ export default function CheckInScreen() {
   const [knee, setKnee] = useState(7);
   const [shoulder, setShoulder] = useState(7);
   const [energy, setEnergy] = useState(7);
-  const [sleep, setSleep] = useState(7);
+  const [weight, setWeight] = useState('');
 
   // Mental state
   const [mentalState, setMentalState] = useState<MentalState>('clear');
@@ -69,37 +69,56 @@ export default function CheckInScreen() {
       const checkIn: CheckIn = {
         id: `checkin_${Date.now()}`,
         date: new Date(),
-        physical: { knee, shoulder, energy, sleep },
+        physical: {
+          knee,
+          shoulder,
+          energy,
+          sleep: 7, // Default value since we removed sleep tracking
+          weight: weight ? parseFloat(weight) : undefined,
+        },
         mental: { state: mentalState, stress, clarity },
         emotional: { primary: emotionalState, intensity: emotionalIntensity },
         createdAt: new Date(),
       };
 
-      // Save check-in to database
-      await database.write(async () => {
-        const checkInsCollection = database.collections.get('check_ins');
-        await checkInsCollection.create((record: any) => {
-          record.date = checkIn.date;
-          record.physicalKnee = knee;
-          record.physicalShoulder = shoulder;
-          record.physicalEnergy = energy;
-          record.physicalSleep = sleep;
-          record.mentalState = mentalState;
-          record.mentalStress = stress;
-          record.mentalClarity = clarity;
-          record.emotionalPrimary = emotionalState;
-          record.emotionalIntensity = emotionalIntensity;
-        });
-      });
+      // Save check-in to storage
+      try {
+        await storageService.saveCheckIn(checkIn);
+        console.log('Check-in saved successfully');
+      } catch (saveError) {
+        console.error('Failed to save check-in, but continuing with workout generation:', saveError);
+        // Continue even if save fails - don't block workout generation
+      }
 
       // Generate workout with AI
       const workout = await workoutGenerator.generateWorkout(checkIn);
 
-      // Navigate to workout display
-      router.push({
-        pathname: '/workout/[id]',
-        params: { id: workout.id, workout: JSON.stringify(workout) },
-      });
+      // Save workout to storage
+      try {
+        const workoutId = await storageService.saveWorkout(workout);
+        console.log('Workout saved successfully with ID:', workoutId);
+
+        // Navigate to check-in results screen (shows Bible verse, then workout)
+        router.push({
+          pathname: '/check-in-result',
+          params: {
+            checkIn: JSON.stringify(checkIn),
+            workoutId: workoutId,
+            workout: JSON.stringify(workout),
+          },
+        });
+      } catch (saveError) {
+        console.error('Failed to save workout:', saveError);
+        // Still navigate to results even if save fails
+        router.push({
+          pathname: '/check-in-result',
+          params: {
+            checkIn: JSON.stringify(checkIn),
+            workoutId: workout.id,
+            workout: JSON.stringify(workout),
+          },
+        });
+      }
     } catch (error) {
       console.error('Failed to generate workout:', error);
       Alert.alert(
@@ -118,6 +137,23 @@ export default function CheckInScreen() {
       <Text style={styles.subtitle}>Quick check on your physical state</Text>
 
       <Card style={styles.card}>
+        {/* Weight Input - Now Primary */}
+        <View style={styles.weightContainer}>
+          <Text style={styles.weightLabel}>⚖️ Body Weight</Text>
+          <Text style={styles.weightSubtitle}>Track your progress over time</Text>
+          <View style={styles.weightInputWrapper}>
+            <TextInput
+              style={styles.weightInput}
+              value={weight}
+              onChangeText={setWeight}
+              placeholder="Enter current weight"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="numeric"
+            />
+            <Text style={styles.weightUnit}>lbs</Text>
+          </View>
+        </View>
+
         <SliderInput
           label="Left Knee"
           value={knee}
@@ -135,12 +171,6 @@ export default function CheckInScreen() {
           value={energy}
           onChange={setEnergy}
           emoji="⚡"
-        />
-        <SliderInput
-          label="Sleep Quality"
-          value={sleep}
-          onChange={setSleep}
-          emoji="💤"
         />
       </Card>
 
@@ -326,5 +356,44 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginVertical: spacing.xl,
+  },
+  weightContainer: {
+    marginBottom: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  weightLabel: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold as any,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  weightSubtitle: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  weightInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.inputBackground,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    paddingHorizontal: spacing.md,
+  },
+  weightInput: {
+    flex: 1,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold as any,
+    color: colors.text,
+    paddingVertical: spacing.md,
+  },
+  weightUnit: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.medium as any,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
 });

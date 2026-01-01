@@ -1,24 +1,67 @@
 // Settings Screen
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { colors, fontSize, fontWeight, spacing, borderRadius } from '@/theme/colors';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { storageService } from '@/services/storage/asyncStorage';
 
 export default function SettingsScreen() {
-  const handleClearData = () => {
+  const router = useRouter();
+  const [clearing, setClearing] = useState(false);
+
+  const handleClearAllData = async () => {
     Alert.alert(
       'Clear All Data',
       'This will delete all your check-ins, workouts, and progress. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Clear Data', 
+        {
+          text: 'Clear All Data',
           style: 'destructive',
-          onPress: () => {
-            // TODO: Implement data clearing
-            Alert.alert('Success', 'All data cleared');
+          onPress: async () => {
+            try {
+              setClearing(true);
+              await storageService.clearAllData();
+              Alert.alert('Success', 'All data has been cleared. The app will reload.');
+              // Force reload to refresh the UI
+              setTimeout(() => {
+                // App will reload on next navigation
+              }, 1000);
+            } catch (error) {
+              console.error('Error clearing data:', error);
+              Alert.alert('Error', 'Failed to clear data. Please try again.');
+            } finally {
+              setClearing(false);
+            }
+          }
+        },
+      ]
+    );
+  };
+
+  const handleClearTodayData = async () => {
+    Alert.alert(
+      'Clear Today\'s Data',
+      'This will delete only today\'s check-in and workout. Use this to re-test the flow.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Today',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setClearing(true);
+              await storageService.clearTodayData();
+              Alert.alert('Success', 'Today\'s data has been cleared. You can now do a new check-in.');
+            } catch (error) {
+              console.error('Error clearing today\'s data:', error);
+              Alert.alert('Error', 'Failed to clear today\'s data. Please try again.');
+            } finally {
+              setClearing(false);
+            }
           }
         },
       ]
@@ -40,14 +83,19 @@ export default function SettingsScreen() {
       </Card>
 
       {/* Equipment */}
-      <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>Your Equipment</Text>
-        <SettingRow label="Rowing Machine" value="Echelon Row ✅" />
-        <SettingRow label="Resistance Bands" value="Light, Medium, Heavy ✅" />
-        <SettingRow label="Cable Machine" value="✅" />
-        <SettingRow label="Stability Ball" value="65cm ✅" />
-        <SettingRow label="Free Weights" value="5-45 lbs ✅" />
-      </Card>
+      <TouchableOpacity onPress={() => router.push('/equipment')}>
+        <Card style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.sectionTitle}>Your Equipment</Text>
+            <Text style={styles.cardAction}>Edit →</Text>
+          </View>
+          <SettingRow label="Rowing Machine" value="Echelon Row ✅" />
+          <SettingRow label="Resistance Bands" value="Light, Medium, Heavy ✅" />
+          <SettingRow label="Cable Machine" value="✅" />
+          <SettingRow label="Stability Ball" value="65cm ✅" />
+          <SettingRow label="Free Weights" value="5-45 lbs ✅" />
+        </Card>
+      </TouchableOpacity>
 
       {/* Preferences */}
       <Card style={styles.card}>
@@ -76,11 +124,21 @@ export default function SettingsScreen() {
       {/* Danger Zone */}
       <Card style={[styles.card, styles.dangerCard]}>
         <Text style={styles.sectionTitle}>Danger Zone</Text>
+        <Text style={styles.dangerNote}>⚠️ For testing: Clear today's data to re-do check-in</Text>
+        <Button
+          title="Clear Today's Data"
+          onPress={handleClearTodayData}
+          variant="secondary"
+          fullWidth
+          disabled={clearing}
+          style={styles.dangerButton}
+        />
         <Button
           title="Clear All Data"
-          onPress={handleClearData}
+          onPress={handleClearAllData}
           variant="danger"
           fullWidth
+          disabled={clearing}
         />
       </Card>
 
@@ -122,11 +180,21 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.lg,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   sectionTitle: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.semibold as any,
     color: colors.text,
-    marginBottom: spacing.md,
+  },
+  cardAction: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold as any,
+    color: colors.primary,
   },
   settingRow: {
     flexDirection: 'row',
@@ -148,6 +216,15 @@ const styles = StyleSheet.create({
   dangerCard: {
     borderColor: colors.error + '50',
     backgroundColor: colors.error + '10',
+  },
+  dangerNote: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+    fontStyle: 'italic',
+  },
+  dangerButton: {
+    marginBottom: spacing.md,
   },
   footer: {
     fontSize: fontSize.sm,

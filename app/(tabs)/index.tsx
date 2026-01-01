@@ -6,13 +6,16 @@ import { Link, useRouter } from 'expo-router';
 import { colors, fontSize, fontWeight, spacing, borderRadius } from '@/theme/colors';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { database } from '@/database';
+import { storageService } from '@/services/storage/asyncStorage';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [streak, setStreak] = useState(0);
   const [todayCheckIn, setTodayCheckIn] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [weeklyCount, setWeeklyCount] = useState(0);
+  const [monthlyCount, setMonthlyCount] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
@@ -20,60 +23,40 @@ export default function HomeScreen() {
 
   const loadDashboardData = async () => {
     try {
-      // Check for today's check-in
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const checkInsCollection = database.collections.get('check_ins');
-      const todayCheckIns = await checkInsCollection
-        .query()
-        .fetch();
-      
-      const hasCheckIn = todayCheckIns.some((ci: any) => {
-        const checkInDate = new Date(ci.date);
-        checkInDate.setHours(0, 0, 0, 0);
-        return checkInDate.getTime() === today.getTime();
-      });
-      
-      setTodayCheckIn(hasCheckIn);
+      setLoading(true);
 
-      // Check for today's workout
-      const workoutsCollection = database.collections.get('workouts');
-      const todayWorkouts = await workoutsCollection
-        .query()
-        .fetch();
-      
-      const hasWorkout = todayWorkouts.some((w: any) => {
-        const workoutDate = new Date(w.date);
-        workoutDate.setHours(0, 0, 0, 0);
-        return workoutDate.getTime() === today.getTime() && w.completed;
-      });
-      
-      setTodayWorkout(hasWorkout);
+      // Load all dashboard data from storage
+      const [checkIn, workout, currentStreak, weekly, monthly] = await Promise.all([
+        storageService.getTodayCheckIn(),
+        storageService.getTodayWorkout(),
+        storageService.getUserStreak(),
+        storageService.getWeeklyWorkoutCount(),
+        storageService.getMonthlyWorkoutCount(),
+      ]);
 
-      // Calculate streak
-      const completedWorkouts = todayWorkouts.filter((w: any) => w.completed);
-      let currentStreak = 0;
-      let checkDate = new Date();
-      
-      while (currentStreak < 100) { // max check 100 days
-        checkDate.setDate(checkDate.getDate() - 1);
-        const hasWorkoutOnDate = completedWorkouts.some((w: any) => {
-          const wDate = new Date(w.date);
-          wDate.setHours(0, 0, 0, 0);
-          return wDate.getTime() === checkDate.getTime();
-        });
-        
-        if (hasWorkoutOnDate) {
-          currentStreak++;
-        } else {
-          break;
-        }
-      }
-      
+      setTodayCheckIn(checkIn !== null);
+      setTodayWorkout(workout !== null && workout.completed);
       setStreak(currentStreak);
+      setWeeklyCount(weekly);
+      setMonthlyCount(monthly);
+
+      console.log('Dashboard data loaded:', {
+        hasCheckIn: checkIn !== null,
+        hasWorkout: workout !== null,
+        streak: currentStreak,
+        weekly,
+        monthly,
+      });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      // Set default values on error
+      setTodayCheckIn(false);
+      setTodayWorkout(false);
+      setStreak(0);
+      setWeeklyCount(0);
+      setMonthlyCount(0);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -82,12 +65,17 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>💪 STRONGHOLD</Text>
-          <Text style={styles.subtitle}>Your AI Workout Coach</Text>
+          <Text style={styles.greeting}>
+            <Text style={styles.greetingIcon}>⚡</Text> STRONGHOLD
+          </Text>
+          <Text style={styles.subtitle}>
+            <Text style={styles.aiLabel}>AI </Text>
+            <Text>Workout Coach</Text>
+          </Text>
         </View>
         <View style={styles.streakBadge}>
-          <Text style={styles.streakNumber}>🔥 {streak}</Text>
-          <Text style={styles.streakLabel}>day streak</Text>
+          <Text style={styles.streakNumber}>{streak}</Text>
+          <Text style={styles.streakLabel}>DAY STREAK</Text>
         </View>
       </View>
 
@@ -154,19 +142,19 @@ export default function HomeScreen() {
       {/* Quick Stats */}
       <View style={styles.statsGrid}>
         <Card style={styles.statCard}>
-          <Text style={styles.statValue}>{streak}</Text>
+          <Text style={styles.statValue}>{loading ? '...' : streak}</Text>
           <Text style={styles.statLabel}>Day Streak</Text>
         </Card>
         <Card style={styles.statCard}>
-          <Text style={styles.statValue}>-</Text>
+          <Text style={styles.statValue}>{loading ? '...' : weeklyCount}</Text>
           <Text style={styles.statLabel}>This Week</Text>
         </Card>
         <Card style={styles.statCard}>
-          <Text style={styles.statValue}>-</Text>
-          <Text style={styles.statLabel}>Total Workouts</Text>
+          <Text style={styles.statValue}>{loading ? '...' : streak}</Text>
+          <Text style={styles.statLabel}>Current Streak</Text>
         </Card>
         <Card style={styles.statCard}>
-          <Text style={styles.statValue}>-</Text>
+          <Text style={styles.statValue}>{loading ? '...' : monthlyCount}</Text>
           <Text style={styles.statLabel}>This Month</Text>
         </Card>
       </View>
@@ -189,48 +177,75 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  headerWrapper: {
+    marginRight: -spacing.sm,
+    paddingRight: spacing.lg,
+    marginBottom: spacing.xl,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.xl,
   },
   greeting: {
-    fontSize: fontSize.xxxl,
-    fontWeight: fontWeight.bold as any,
+    fontSize: fontSize.xxxxl,
+    fontWeight: fontWeight.extrabold as any,
     color: colors.text,
+    letterSpacing: -1,
+  },
+  greetingIcon: {
+    color: colors.primary,
+  },
+  aiLabel: {
+    color: colors.accent,
+    fontWeight: fontWeight.bold as any,
   },
   subtitle: {
-    fontSize: fontSize.md,
+    fontSize: fontSize.lg,
     color: colors.textSecondary,
     marginTop: spacing.xs,
+    letterSpacing: 0.5,
   },
   streakBadge: {
-    backgroundColor: colors.primary + '20',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.backgroundCardHighlight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderAccent,
+    minWidth: 60,
   },
   streakNumber: {
     fontSize: fontSize.xxl,
-    fontWeight: fontWeight.bold as any,
+    fontWeight: fontWeight.extrabold as any,
     color: colors.primary,
+    letterSpacing: -0.5,
   },
   streakLabel: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
+    fontWeight: fontWeight.semibold as any,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   statusCard: {
     marginBottom: spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
   },
   cardTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold as any,
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold as any,
     color: colors.text,
     marginBottom: spacing.md,
+    letterSpacing: -0.3,
   },
   statusRow: {
     flexDirection: 'row',
@@ -241,20 +256,25 @@ const styles = StyleSheet.create({
   },
   statusEmoji: {
     fontSize: fontSize.xxxl,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   statusText: {
     fontSize: fontSize.sm,
     color: colors.textSecondary,
+    fontWeight: fontWeight.medium as any,
   },
   actionCard: {
     marginBottom: spacing.lg,
+    backgroundColor: colors.backgroundCardHighlight,
+    borderWidth: 1,
+    borderColor: colors.borderAccent,
   },
   actionTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold as any,
+    fontSize: fontSize.xxl,
+    fontWeight: fontWeight.extrabold as any,
     color: colors.text,
     marginBottom: spacing.sm,
+    letterSpacing: -0.5,
   },
   actionDescription: {
     fontSize: fontSize.md,
@@ -264,7 +284,7 @@ const styles = StyleSheet.create({
   },
   streakCelebration: {
     fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold as any,
+    fontWeight: fontWeight.bold as any,
     color: colors.primary,
     textAlign: 'center',
     marginTop: spacing.md,
@@ -280,29 +300,40 @@ const styles = StyleSheet.create({
     minWidth: '45%',
     alignItems: 'center',
     paddingVertical: spacing.lg,
+    backgroundColor: colors.backgroundCardHighlight,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   statValue: {
     fontSize: fontSize.xxxl,
-    fontWeight: fontWeight.bold as any,
+    fontWeight: fontWeight.extrabold as any,
     color: colors.primary,
     marginBottom: spacing.xs,
+    letterSpacing: -1,
   },
   statLabel: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
+    fontWeight: fontWeight.semibold as any,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   tipCard: {
     alignItems: 'center',
+    backgroundColor: colors.glass.background,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
   },
   tipEmoji: {
-    fontSize: 48,
+    fontSize: 42,
     marginBottom: spacing.sm,
   },
   tipTitle: {
     fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold as any,
+    fontWeight: fontWeight.bold as any,
     color: colors.text,
     marginBottom: spacing.sm,
+    letterSpacing: -0.3,
   },
   tipText: {
     fontSize: fontSize.md,

@@ -53,10 +53,14 @@ EMOTIONAL STATE:
 
 AVAILABLE EQUIPMENT:
 - Echelon Row machine (ECH-ROW-026782)
+- Power cage/squat rack with safety bars (can safely squat, bench, overhead press)
+- Barbell with plates (up to 45 lbs per side)
+- EZ curl bar
+- Dumbbells (5-45 lbs)
 - Resistance bands (light, medium, heavy)
 - Cable machine
 - Stability ball
-- Free weights (5-45 lbs)
+- Bodyweight
 
 PROVIDE WORKOUT IN THIS EXACT JSON FORMAT:
 \`\`\`json
@@ -68,7 +72,7 @@ PROVIDE WORKOUT IN THIS EXACT JSON FORMAT:
     "exercises": [
       {
         "name": "<exercise name>",
-        "equipment": "rowing_machine" | "resistance_bands" | "cables" | "stability_ball" | "free_weights" | "bodyweight",
+        "equipment": "rowing_machine" | "resistance_bands" | "cables" | "barbell" | "ez_bar" | "dumbbells" | "stability_ball" | "bodyweight",
         "duration": <minutes if timed, or null>,
         "reps": <number or null>,
         "sets": 1,
@@ -181,17 +185,88 @@ Respond ONLY with valid JSON. No markdown, no explanation, just the JSON object.
    * Transform exercises from AI format to app format
    */
   private transformExercises(exercises: any[], phase: string): Exercise[] {
-    return exercises.map(ex => ({
-      id: this.generateId(),
-      name: ex.name,
-      equipment: ex.equipment || 'bodyweight',
-      phase: phase as any,
-      sets: this.createSets(ex.sets || 1, ex.reps, ex.targetWeight, ex.restSeconds || 60),
-      formCues: ex.formCues || [],
-      modifications: ex.modifications,
-      instructions: ex.instructions,
-      duration: ex.duration,
-    }));
+    return exercises.map(ex => {
+      // Try to find matching exercise template to get targetMuscles
+      const template = Object.values(EXERCISES).find(
+        t => t.name.toLowerCase() === ex.name.toLowerCase()
+      );
+
+      return {
+        id: this.generateId(),
+        name: ex.name,
+        equipment: ex.equipment || 'bodyweight',
+        phase: phase as any,
+        sets: this.createSets(ex.sets || 1, ex.reps, ex.targetWeight, ex.restSeconds || 60),
+        formCues: ex.formCues || [],
+        modifications: ex.modifications,
+        instructions: ex.instructions,
+        duration: ex.duration,
+        targetMuscles: template?.targetMuscles || this.inferTargetMuscles(ex.name, ex.equipment),
+        safetyConsiderations: template?.kneeFriendly && template?.shoulderFriendly
+          ? ['Knee Friendly', 'Shoulder Friendly']
+          : template?.kneeFriendly
+          ? ['Knee Friendly']
+          : template?.shoulderFriendly
+          ? ['Shoulder Friendly']
+          : [],
+      };
+    });
+  }
+
+  /**
+   * Infer target muscles from exercise name if not in library
+   */
+  private inferTargetMuscles(name: string, equipment: string): string[] {
+    const nameLower = name.toLowerCase();
+
+    // Rowing exercises
+    if (nameLower.includes('row') && equipment === 'rowing_machine') {
+      return ['full body', 'cardiovascular'];
+    }
+    if (nameLower.includes('row') && equipment !== 'rowing_machine') {
+      return ['back', 'biceps'];
+    }
+
+    // Chest exercises
+    if (nameLower.includes('chest') || nameLower.includes('press') && !nameLower.includes('shoulder')) {
+      return ['chest', 'triceps'];
+    }
+
+    // Shoulder exercises
+    if (nameLower.includes('shoulder') || nameLower.includes('overhead') || nameLower.includes('lateral')) {
+      return ['shoulders'];
+    }
+
+    // Back exercises
+    if (nameLower.includes('pulldown') || nameLower.includes('pull')) {
+      return ['back', 'biceps'];
+    }
+
+    // Leg exercises
+    if (nameLower.includes('squat') || nameLower.includes('lunge') || nameLower.includes('leg')) {
+      return ['legs', 'glutes'];
+    }
+
+    // Arm exercises
+    if (nameLower.includes('curl') || nameLower.includes('bicep')) {
+      return ['biceps'];
+    }
+    if (nameLower.includes('tricep') || nameLower.includes('extension')) {
+      return ['triceps'];
+    }
+
+    // Core exercises
+    if (nameLower.includes('core') || nameLower.includes('plank') || nameLower.includes('crunch')) {
+      return ['core', 'abs'];
+    }
+
+    // Stretches/cooldown
+    if (nameLower.includes('stretch') || nameLower.includes('mobility')) {
+      return ['flexibility', 'mobility'];
+    }
+
+    // Default fallback
+    return ['full body'];
   }
   
   /**
@@ -258,6 +333,8 @@ Respond ONLY with valid JSON. No markdown, no explanation, just the JSON object.
           }],
           duration: 5,
           formCues: ['Easy pace', 'Focus on form'],
+          targetMuscles: ['full body', 'cardiovascular'],
+          safetyConsiderations: ['Knee Friendly', 'Shoulder Friendly'],
         },
         {
           id: this.generateId(),
@@ -266,6 +343,8 @@ Respond ONLY with valid JSON. No markdown, no explanation, just the JSON object.
           phase: 'strength',
           sets: this.createSets(3, 12, undefined, 60),
           formCues: ['Control the movement', 'Full range of motion'],
+          targetMuscles: ['chest', 'triceps'],
+          safetyConsiderations: ['Shoulder Friendly'],
         },
         {
           id: this.generateId(),
@@ -274,6 +353,8 @@ Respond ONLY with valid JSON. No markdown, no explanation, just the JSON object.
           phase: 'strength',
           sets: this.createSets(3, 12, undefined, 60),
           formCues: ['Pull elbows back', 'Squeeze shoulder blades'],
+          targetMuscles: ['back', 'biceps'],
+          safetyConsiderations: ['Shoulder Friendly'],
         },
       ],
       completed: false,

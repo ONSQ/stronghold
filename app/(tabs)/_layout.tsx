@@ -1,7 +1,11 @@
 // Root Layout - Tab Navigation
 
 import { Tabs } from 'expo-router';
+import { Platform, StatusBar } from 'react-native';
 import { colors, fontSize } from '@/theme/colors';
+
+// Get the status bar height
+const statusBarHeight = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 export default function TabLayout() {
   return (
@@ -9,28 +13,21 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
+        tabBarPosition: 'top',
         tabBarStyle: {
           backgroundColor: colors.backgroundElevated,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 60,
+          borderBottomColor: colors.border,
+          borderBottomWidth: 1,
+          height: 60 + statusBarHeight, // Increase height to accommodate status bar
           paddingBottom: 8,
-          paddingTop: 8,
+          paddingTop: statusBarHeight + 8, // Add status bar height
+          marginTop: 0,
         },
         tabBarLabelStyle: {
           fontSize: fontSize.xs,
           fontWeight: '600',
         },
-        headerStyle: {
-          backgroundColor: colors.backgroundElevated,
-          borderBottomColor: colors.border,
-          borderBottomWidth: 1,
-        },
-        headerTintColor: colors.text,
-        headerTitleStyle: {
-          fontSize: fontSize.xl,
-          fontWeight: '700',
-        },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
@@ -46,6 +43,13 @@ export default function TabLayout() {
         options={{
           title: 'Workouts',
           tabBarIcon: ({ color }) => <TabBarIcon name="dumbbell" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'History',
+          tabBarIcon: ({ color}) => <TabBarIcon name="history" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -68,14 +72,16 @@ export default function TabLayout() {
 
 // Simple icon component (using emoji for now, can be replaced with icon library)
 function TabBarIcon({ name, color }: { name: string; color: string }) {
+  const { Text } = require('react-native');
   const icons: Record<string, string> = {
     home: '🏠',
     dumbbell: '💪',
+    history: '📅',
     chart: '📊',
     settings: '⚙️',
   };
-  
+
   return (
-    <span style={{ fontSize: 24 }}>{icons[name] || '•'}</span>
+    <Text style={{ fontSize: 24 }}>{icons[name] || '•'}</Text>
   );
 }
